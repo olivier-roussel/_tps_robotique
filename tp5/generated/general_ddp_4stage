@@ -12,23 +12,32 @@ for i in range(4):
     terminalCostModel = crocoddyl.CostModelSum(state)  # And also for final state
 
     ### Cost for reaching the target
-    pref = crocoddyl.FrameTranslation(FRAME_TIP, goals[i])
-    goalTrackingCost = crocoddyl.CostModelFrameTranslation(state, pref)
+    goalTrackingRes = crocoddyl.ResidualModelFrameTranslation(state, FRAME_TIP, goals[i])
+    goalTrackingCost = crocoddyl.CostModelResidual(state, goalTrackingRes)
 
-    ### Cost for regularizing the state about robot_model.x0, running AND terminal
-    weights=crocoddyl.ActivationModelWeightedQuad(np.array([1,1,1,1,1,1,1, 1,1,1,1,2,2,2.]))
-    xRegCost = crocoddyl.CostModelState(state,weights,robot_model.x0)
-    weightsT=crocoddyl.ActivationModelWeightedQuad(np.array([.01,.01,.01,.01,.01,.01,.01, 1,1,1,1,2,2,2.]))
-    xRegCostT = crocoddyl.CostModelState(state,weightsT,robot_model.x0)
+    # Cost for 6d tracking  || log( M(q)^-1 Mref ) ||**2
+    Mref = pin.SE3(pin.utils.rpyToMatrix(0,np.pi/2, np.pi), goals[i])
+    goal6TrackingRes = crocoddyl.ResidualModelFramePlacement(state, FRAME_TIP, Mref)
+    goal6TrackingCost = crocoddyl.CostModelResidual(state, goal6TrackingRes)
 
-    ### Cost for keeping the control low: around zeros with uniform weights
-    uRegCost = crocoddyl.CostModelControl(state)
+    # Cost for state regularization || x - x* ||**2
+    xRegWeights = crocoddyl.ActivationModelWeightedQuad(np.array([1,1,1,1,1,1,1, 1,1,1,1,2,2,2.]))
+    xRegRes = crocoddyl.ResidualModelState(state, robot_model.x0)
+    xRegCost = crocoddyl.CostModelResidual(state, xRegWeights, xRegRes)
 
+    # Terminal cost for state regularization || x - x* ||**2
+    xRegWeightsT=crocoddyl.ActivationModelWeightedQuad(np.array([1,1,1,1,1,1,1, 1,1,1,1,2,2,2.]))
+    xRegResT = crocoddyl.ResidualModelState(state, robot_model.x0)
+    xRegCostT = crocoddyl.CostModelResidual(state, xRegWeightsT, xRegResT)
+
+    # Cost for control regularization || u - g(q) ||**2
+    uRegRes = crocoddyl.ResidualModelControlGrav(state)
+    uRegCost = crocoddyl.CostModelResidual(state, uRegRes)
 
     runningCostModel.addCost("gripperPose", goalTrackingCost, .001)  # addCost is a method of CostModelSum that take another CostModel
     runningCostModel.addCost("xReg", xRegCost, 1e-3)  # We also weight the sum of cost
     runningCostModel.addCost("uReg", uRegCost, 1e-6)
-    terminalCostModel.addCost("gripperPose", goalTrackingCost, 10)
+    terminalCostModel.addCost("gripperPose", goal6TrackingCost, 10)
     terminalCostModel.addCost("xReg", xRegCostT, .01)
     terminalCostModel.addCost("uReg", xRegCostT, 1e-6)
 
