@@ -1,0 +1,15 @@
+name: robotics_course
+channels:
+  - conda-forge
+  - defaults
+dependencies:
+  - python=3.9
+  - numpy=1.22
+  - pinocchio
+  - meshcat-python
+  - example-robot-data
+  - jupyterlab
+  - ipywidgets
+  - matplotlib
+  - scipy
+  - quadprog
